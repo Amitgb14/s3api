@@ -1,9 +1,10 @@
 package s3api
 
 import (
-	"github.com/Amitgb14/s3client/s3errors"
+	"github.com/Amitgb14/s3api/s3errors"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
+	log "github.com/sirupsen/logrus"
 )
 
 // ListBuckets returns list of buckets.
@@ -49,4 +50,33 @@ func (c *Client) CreateBucket(bucketname string) bool {
 		return false
 	}
 	return true
+}
+
+func (c *Client) SetBucketLC(bucketname string, rules []*s3.LifecycleRule) bool {
+	input := &s3.PutBucketLifecycleConfigurationInput{
+		Bucket: aws.String(bucketname),
+		LifecycleConfiguration: &s3.BucketLifecycleConfiguration{
+			Rules: rules,
+		},
+	}
+	_, err := c.svc.PutBucketLifecycleConfiguration(input)
+
+	if err != nil {
+		// s3errors.BucketError(err)
+		log.Errorf("Policy Error: %v", err)
+		return false
+	}
+	return true
+}
+
+func (c *Client) GetBucketLC(bucketname string) *s3.GetBucketLifecycleConfigurationOutput {
+	input := &s3.GetBucketLifecycleConfigurationInput{
+		Bucket: aws.String(bucketname),
+	}
+	result, err := c.svc.GetBucketLifecycleConfiguration(input)
+	if err != nil {
+		s3errors.BucketError(err)
+		return &s3.GetBucketLifecycleConfigurationOutput{}
+	}
+	return result
 }

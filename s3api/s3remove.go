@@ -1,7 +1,7 @@
 package s3api
 
 import (
-	"github.com/Amitgb14/s3client/s3errors"
+	"github.com/Amitgb14/s3api/s3errors"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 )

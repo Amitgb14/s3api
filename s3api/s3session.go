@@ -1,7 +1,6 @@
 package s3api
 
 import (
-	"fmt"
 	"net"
 	"net/http"
 	"time"
@@ -11,39 +10,53 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	log "github.com/sirupsen/logrus"
 )
+
+type S3Config struct {
+	AccessKey             string
+	SecretAccessKey       string
+	Endpoint              string
+	Region                string
+	Timeout               time.Duration
+	MaxIdleConns          int
+	IdleConnTimeout       time.Duration
+	TLSHandshakeTimeout   time.Duration
+	ExpectContinueTimeout time.Duration
+}
 
 // Client structure
 type Client struct {
 	svc      *s3.S3
 	uploader *s3manager.Uploader
+	Config   S3Config
 }
 
 // NewSession create S3 client session
-func (c *Client) NewSession(awsAccessKeyID, awsSecretAccessKey, endpointURL string) error {
+func (c *Client) NewSession() error {
 	sess, err := session.NewSession(&aws.Config{
-		Region:           aws.String("us-east-1"),
-		Endpoint:         aws.String(endpointURL),
+		Region:           aws.String(c.Config.Region),
+		Endpoint:         aws.String(c.Config.Endpoint),
 		S3ForcePathStyle: aws.Bool(true),
 		// LogLevel:         aws.LogLevel(aws.LogDebugWithSigning),
-		Credentials: credentials.NewStaticCredentials(awsAccessKeyID, awsSecretAccessKey, ""),
+		Credentials: credentials.NewStaticCredentials(c.Config.AccessKey, c.Config.SecretAccessKey, ""),
 	})
 	if err != nil {
-		fmt.Println("Configuration failed!")
+		log.Infof("Configuration failed!, err: %v", err)
 		return err
 	}
 	c.svc = s3.New(sess, &aws.Config{HTTPClient: &http.Client{
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
+				Timeout:   c.Config.Timeout * time.Second,
 				KeepAlive: 30 * time.Second,
 			}).DialContext,
-			MaxIdleConns:          10000,
-			IdleConnTimeout:       60 * time.Second,
+			MaxIdleConns:          c.Config.MaxIdleConns,
+			IdleConnTimeout:       c.Config.IdleConnTimeout * time.Second,
 			MaxIdleConnsPerHost:   4096,
-			TLSHandshakeTimeout:   3 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
+			TLSHandshakeTimeout:   c.Config.TLSHandshakeTimeout * time.Second,
+			ExpectContinueTimeout: c.Config.ExpectContinueTimeout * time.Second,
 		},
 	}})
 	// Create an uploader with the session and custom options

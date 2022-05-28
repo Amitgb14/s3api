@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Amitgb14/s3client/s3errors"
+	"github.com/Amitgb14/s3api/s3errors"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -29,7 +29,32 @@ func (c *Client) CreateUploadId(key string) (*string, error) {
 	return result.UploadId, nil
 }
 
-func (c *Client) WriteFile(key string, fileReader *bytes.Reader, size int64) error {
+func (c *Client) PutObjectTagging(key string, tagset []*s3.Tag) error {
+	bucketName := GetBucketName(key)
+	objectName := GetKey(key)
+
+	fmt.Println(bucketName)
+	fmt.Println(objectName)
+
+	input := &s3.PutObjectTaggingInput{
+
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(objectName),
+		Tagging: &s3.Tagging{
+			TagSet: tagset,
+		},
+	}
+
+	_, err := c.svc.PutObjectTagging(input)
+	if err != nil {
+		s3errors.BucketError(err)
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) PutObject(key string, fileReader *bytes.Reader, size int64) error {
 	bucketName := GetBucketName(key)
 	objectName := GetKey(key)
 
@@ -51,7 +76,6 @@ func (c *Client) WriteFile(key string, fileReader *bytes.Reader, size int64) err
 		}
 
 	} else {
-		//fmt.Print("Normal use")
 		input := &s3.PutObjectInput{
 			Body:   fileReader,
 			Bucket: aws.String(bucketName),
@@ -132,14 +156,14 @@ func (c *Client) WriteMetaObject(bucketName, key string, uploadID *string, partN
 	return nil
 }
 
-func (c *Client) WriteFragment(key string, content *string, partNumber int64, _uploadID *string) (*string, error) {
+func (c *Client) WriteFragment(key string, content *bytes.Reader, partNumber int64, _uploadID *string) (*string, error) {
 	bucketName := GetBucketName(key)
 	objectName := GetKey(key)
 
 	var uploadID *string = _uploadID
 
 	input := &s3.UploadPartInput{
-		Body:       aws.ReadSeekCloser(strings.NewReader(*content)),
+		Body:       content,
 		Bucket:     aws.String(bucketName),
 		Key:        aws.String(objectName),
 		PartNumber: aws.Int64(partNumber),
@@ -195,9 +219,7 @@ func (c *Client) CompleteFragment(key string, fragmentsMeta map[int64]string, up
 		}
 	}()
 
-	// fmt.Println(input)
 	result, err := c.svc.CompleteMultipartUpload(input)
-	// fmt.Println(result)
 	if err != nil {
 
 		s3errors.BucketError(err)

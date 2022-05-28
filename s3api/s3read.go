@@ -1,7 +1,7 @@
 package s3api
 
 import (
-	"github.com/Amitgb14/s3client/s3errors"
+	"github.com/Amitgb14/s3api/s3errors"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 )
@@ -64,14 +64,13 @@ func (c *Client) GetFragmentMeta(bucketName, key string) *s3.GetObjectOutput {
 }
 
 // GetObjects return objects
-func (c *Client) ListObjects(key, prefix string, keys int, nextmarker string) (*s3.ListObjectsOutput, error) {
+func (c *Client) ListObjects(key, prefix string, keys int) (*s3.ListObjectsOutput, error) {
 	bucketName := GetBucketName(key)
 	// var keyList []string
 	input := &s3.ListObjectsInput{
 		Bucket:  aws.String(bucketName),
 		Prefix:  aws.String(prefix),
 		MaxKeys: aws.Int64(int64(keys)),
-		Marker:  aws.String(nextmarker),
 	}
 
 	result, err := c.svc.ListObjects(input)
