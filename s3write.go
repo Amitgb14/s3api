@@ -1,18 +1,18 @@
 package s3api
 
 import (
-	"bytes"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
-	"github.com/Amitgb14/s3api/s3errors"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	log "github.com/sirupsen/logrus"
 )
 
-func (c *Client) CreateUploadId(key string) (*string, error) {
+func (c *s3client) CreateUploadId(key string) (*string, error) {
 	bucketName := GetBucketName(key)
 	objectName := GetKey(key)
 
@@ -22,95 +22,50 @@ func (c *Client) CreateUploadId(key string) (*string, error) {
 	}
 	result, err := c.svc.CreateMultipartUpload(input)
 	if err != nil {
-		s3errors.BucketError(err)
 		return nil, err
 	}
 
 	return result.UploadId, nil
 }
 
-func (c *Client) PutObjectTagging(key string, tagset []*s3.Tag) error {
+func (c *s3client) WriteFile(key, fname string, metadata map[string]*string, size int64) error {
 	bucketName := GetBucketName(key)
 	objectName := GetKey(key)
 
-	fmt.Println(bucketName)
-	fmt.Println(objectName)
-
-	input := &s3.PutObjectTaggingInput{
-
-		Bucket: aws.String(bucketName),
-		Key:    aws.String(objectName),
-		Tagging: &s3.Tagging{
-			TagSet: tagset,
-		},
+	f, _ := os.Open(fname)
+	defer f.Close()
+	input := &s3manager.UploadInput{
+		Body:     f,
+		Bucket:   aws.String(bucketName),
+		Key:      aws.String(objectName),
+		Metadata: metadata,
 	}
-
-	_, err := c.svc.PutObjectTagging(input)
+	_, err := c.uploader.Upload(input)
 	if err != nil {
-		s3errors.BucketError(err)
 		return err
 	}
-
 	return nil
 }
 
-func (c *Client) PutObject(key string, fileReader *bytes.Reader, size int64) error {
-	bucketName := GetBucketName(key)
-	objectName := GetKey(key)
-
-	fmt.Println(bucketName)
-	fmt.Println(objectName)
-	// var result interface{}
-	if int(size) > 150*1024*1024 {
-		fmt.Print("Using manager")
-		input := &s3manager.UploadInput{
-			Body:   fileReader,
-			Bucket: aws.String(bucketName),
-			Key:    aws.String(objectName),
-		}
-
-		_, err := c.uploader.Upload(input)
-		if err != nil {
-			s3errors.BucketError(err)
-			return err
-		}
-
-	} else {
-		input := &s3.PutObjectInput{
-			Body:   fileReader,
-			Bucket: aws.String(bucketName),
-			Key:    aws.String(objectName),
-		}
-
-		_, err := c.svc.PutObject(input)
-		if err != nil {
-			s3errors.BucketError(err)
-			return err
-		}
-
-	}
-	return nil
-}
-
-func (c *Client) WriteObject(key string, content string) (*s3.PutObjectOutput, error) {
+func (c *s3client) WriteObject(key string, content string, metadata map[string]*string) (*s3.PutObjectOutput, error) {
 	bucketName := GetBucketName(key)
 	objectName := GetKey(key)
 
 	input := &s3.PutObjectInput{
-		Body:   aws.ReadSeekCloser(strings.NewReader(content)),
-		Bucket: aws.String(bucketName),
-		Key:    aws.String(objectName),
+		Body:     aws.ReadSeekCloser(strings.NewReader(content)),
+		Bucket:   aws.String(bucketName),
+		Key:      aws.String(objectName),
+		Metadata: metadata,
 	}
 
 	result, err := c.svc.PutObject(input)
 	if err != nil {
-		s3errors.BucketError(err)
 		return nil, err
 	}
 	return result, nil
 }
 
-func (c *Client) MergeETagObject(oldmetadata *s3.GetObjectOutput, newmeta *s3.UploadPartOutput, partNumber int64) (string, *string) {
+func (c *s3client) MergeETagObject(oldmetadata *s3.HeadObjectOutput, newmeta *s3.UploadPartOutput, partNumber int64) (string, *string) {
 
 	uploadID := oldmetadata.Metadata["Uploadid"]
 	parts := *oldmetadata.Metadata["Parts"]
@@ -122,7 +77,7 @@ func (c *Client) MergeETagObject(oldmetadata *s3.GetObjectOutput, newmeta *s3.Up
 	return ETagEncode(deMeta), uploadID
 }
 
-func (c *Client) WriteMetaObject(bucketName, key string, uploadID *string, partNumber int64, newmeta *s3.UploadPartOutput) error {
+func (c *s3client) WriteMetaObject(bucketName, key string, uploadID *string, partNumber int64, newmeta *s3.UploadPartOutput) error {
 
 	var updatedMetadata string
 	metadata := c.GetFragmentMeta(bucketName, key)
@@ -138,7 +93,6 @@ func (c *Client) WriteMetaObject(bucketName, key string, uploadID *string, partN
 		return nil
 	}
 
-	// fmt.Println(updatedMetadata)
 	input := &s3.PutObjectInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String(key),
@@ -150,20 +104,19 @@ func (c *Client) WriteMetaObject(bucketName, key string, uploadID *string, partN
 
 	_, err := c.svc.PutObject(input)
 	if err != nil {
-		s3errors.BucketError(err)
 		return err
 	}
 	return nil
 }
 
-func (c *Client) WriteFragment(key string, content *bytes.Reader, partNumber int64, _uploadID *string) (*string, error) {
+func (c *s3client) WriteFragment(key string, content *string, partNumber int64, _uploadID *string) (*string, error) {
 	bucketName := GetBucketName(key)
 	objectName := GetKey(key)
 
 	var uploadID *string = _uploadID
 
 	input := &s3.UploadPartInput{
-		Body:       content,
+		Body:       aws.ReadSeekCloser(strings.NewReader(*content)),
 		Bucket:     aws.String(bucketName),
 		Key:        aws.String(objectName),
 		PartNumber: aws.Int64(partNumber),
@@ -172,14 +125,13 @@ func (c *Client) WriteFragment(key string, content *bytes.Reader, partNumber int
 
 	result, err := c.svc.UploadPart(input)
 	if err != nil {
-		s3errors.BucketError(err)
 		return nil, err
 	}
 
 	return result.ETag, nil
 }
 
-func (c *Client) convertMaptoCompletedPart(fragmentsMeta map[int64]string) []*s3.CompletedPart {
+func (c *s3client) convertMaptoCompletedPart(fragmentsMeta map[int64]string) []*s3.CompletedPart {
 	var paths []*s3.CompletedPart
 	for key, val := range fragmentsMeta {
 		name := &s3.CompletedPart{
@@ -191,15 +143,14 @@ func (c *Client) convertMaptoCompletedPart(fragmentsMeta map[int64]string) []*s3
 	}
 	return paths
 }
-func (c *Client) CompleteFragment(key string, fragmentsMeta map[int64]string, uploadID *string) (*s3.CompleteMultipartUploadOutput, error) {
+func (c *s3client) CompleteFragment(key string, fragmentsMeta map[int64]string, uploadID *string) (*s3.CompleteMultipartUploadOutput, error) {
 	bucketName := GetBucketName(key)
 	objectName := GetKey(key)
 
 	enParts := c.convertMaptoCompletedPart(fragmentsMeta)
 
 	if enParts == nil {
-		fmt.Printf("Failed to merge all Parts of %s ", key)
-		return nil, nil
+		return nil, fmt.Errorf("Failed to merge all Parts of %v ", key)
 	}
 	input := &s3.CompleteMultipartUploadInput{
 		Bucket: aws.String(bucketName),
@@ -215,16 +166,13 @@ func (c *Client) CompleteFragment(key string, fragmentsMeta map[int64]string, up
 		// to clean FRAGMENTS_METADATA objects
 		_, errM := c.DeleteMetadata(FRAGMENTS_METADATA, key)
 		if errM != nil {
-			s3errors.BucketError(errM)
+			log.Error(errM)
 		}
 	}()
 
 	result, err := c.svc.CompleteMultipartUpload(input)
 	if err != nil {
-
-		s3errors.BucketError(err)
 		return nil, err
 	}
-
 	return result, nil
 }

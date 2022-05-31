@@ -1,13 +1,12 @@
 package s3api
 
 import (
-	"github.com/Amitgb14/s3api/s3errors"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
 // GetBucketLogging return authorized access to bucket.
-func (c *Client) GetBucketLogging(bucketName string) (*s3.GetBucketLoggingOutput, error) {
+func (c *s3client) GetBucketLogging(bucketName string) (*s3.GetBucketLoggingOutput, error) {
 
 	input := &s3.GetBucketLoggingInput{
 		Bucket: aws.String(bucketName),
@@ -15,29 +14,35 @@ func (c *Client) GetBucketLogging(bucketName string) (*s3.GetBucketLoggingOutput
 
 	result, err := c.svc.GetBucketLogging(input)
 	if err != nil {
-		s3errors.BucketError(err)
 		return nil, err
 	}
 	return result, nil
 }
 
 // ObjectIsExists check object is exists or not.
-func (c *Client) ObjectIsExists(bucketName, key string) *s3.GetObjectOutput {
+func (c *s3client) ObjectIsExists(bucketName, key string) (*s3.HeadObjectOutput, error) {
+	result, err := c.HeadObject(bucketName, key)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
 
-	input := &s3.GetObjectInput{
+// HeadObject return objects
+func (c *s3client) HeadObject(bucketName, key string) (*s3.HeadObjectOutput, error) {
+	input := &s3.HeadObjectInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String(key),
 	}
-
-	result, err := c.svc.GetObject(input)
+	result, err := c.svc.HeadObject(input)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return result
+	return result, nil
 }
 
 // GetObjects return objects
-func (c *Client) GetObjects(key string) (*s3.GetObjectOutput, error) {
+func (c *s3client) GetObjects(key string) (*s3.GetObjectOutput, error) {
 	bucketName := GetBucketName(key)
 	objectName := GetKey(key)
 
@@ -48,15 +53,14 @@ func (c *Client) GetObjects(key string) (*s3.GetObjectOutput, error) {
 
 	result, err := c.svc.GetObject(input)
 	if err != nil {
-		s3errors.BucketError(err)
 		return nil, err
 	}
 	return result, nil
 }
 
 // GetFragmentMeta returns fragmnet metadata.
-func (c *Client) GetFragmentMeta(bucketName, key string) *s3.GetObjectOutput {
-	metadata := c.ObjectIsExists(bucketName, key)
+func (c *s3client) GetFragmentMeta(bucketName, key string) *s3.HeadObjectOutput {
+	metadata, _ := c.ObjectIsExists(bucketName, key)
 	if metadata == nil {
 		return nil
 	}
@@ -64,19 +68,18 @@ func (c *Client) GetFragmentMeta(bucketName, key string) *s3.GetObjectOutput {
 }
 
 // GetObjects return objects
-func (c *Client) ListObjects(key, prefix string, keys int) (*s3.ListObjectsOutput, error) {
+func (c *s3client) ListObjects(key, prefix string, keys int, nextmarker string) (*s3.ListObjectsOutput, error) {
 	bucketName := GetBucketName(key)
-	// var keyList []string
 	input := &s3.ListObjectsInput{
 		Bucket:  aws.String(bucketName),
 		Prefix:  aws.String(prefix),
 		MaxKeys: aws.Int64(int64(keys)),
+		Marker:  aws.String(nextmarker),
 	}
 
 	result, err := c.svc.ListObjects(input)
 
 	if err != nil {
-		s3errors.BucketError(err)
 		return nil, err
 	}
 	return result, nil
