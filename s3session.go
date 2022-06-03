@@ -41,6 +41,7 @@ type S3Client interface {
 	WriteMetaObject(bucketName, key string, uploadID *string, partNumber int64, newmeta *s3.UploadPartOutput) error
 	WriteFragment(key string, content *string, partNumber int64, _uploadID *string) (*string, error)
 	CompleteFragment(key string, fragmentsMeta map[int64]string, uploadID *string) (*s3.CompleteMultipartUploadOutput, error)
+	AbortMultipartUploadInput(key string, uploadID *string) error
 }
 
 // NewSession create S3 client session
