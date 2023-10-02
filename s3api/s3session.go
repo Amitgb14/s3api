@@ -21,6 +21,9 @@ type s3client struct {
 
 // Client structure
 type S3Client interface {
+	// get client
+	GetS3Client() *s3.S3
+	GetClient() *s3client
 	// bucket operation
 	BucketIsExist(bucketName string) (bool, error)
 	CreateBucket(bucketname string) error
@@ -32,6 +35,7 @@ type S3Client interface {
 	HeadObject(bucketName, key string) (*s3.HeadObjectOutput, error)
 	GetObjects(key string) (*s3.GetObjectOutput, error)
 	GetFragmentMeta(bucketName, key string) *s3.HeadObjectOutput
+	ListObjects(key, prefix string, keys int, nextmarker string) (*s3.ListObjectsOutput, error)
 
 	// object write operation
 	CreateUploadId(key string) (*string, error)
@@ -76,4 +80,12 @@ func NewSession(awsAccessKeyID, awsSecretAccessKey, region, endpointURL string) 
 	})
 
 	return &c, nil
+}
+
+func (c *s3client) GetS3Client() *s3.S3 {
+	return c.svc
+}
+
+func (c *s3client) GetClient() *s3client {
+	return c
 }
