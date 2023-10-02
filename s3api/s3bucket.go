@@ -24,14 +24,17 @@ func (c *s3client) ListBuckets() ([]string, error) {
 }
 
 // BucketIsExist check bucket is exists or not.
-func (c *s3client) BucketIsExist(bucketName string) bool {
-	buckets, _ := c.ListBuckets()
+func (c *s3client) BucketIsExist(bucketName string) (bool, error) {
+	buckets, err := c.ListBuckets()
+	if err != nil {
+		return false, err
+	}
 	for _, bucket := range buckets {
 		if bucket == bucketName {
-			return true
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 // CreateBucket create new bucket

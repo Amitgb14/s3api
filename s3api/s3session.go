@@ -22,7 +22,7 @@ type s3client struct {
 // Client structure
 type S3Client interface {
 	// bucket operation
-	BucketIsExist(bucketName string) bool
+	BucketIsExist(bucketName string) (bool, error)
 	CreateBucket(bucketname string) error
 	GetBucketLC(bucketname string) (*s3.GetBucketLifecycleConfigurationOutput, error)
 	SetBucketLC(bucketname, prefix string, ttl, abortIncompleteDay int64) (*s3.PutBucketLifecycleConfigurationOutput, error)
@@ -41,7 +41,6 @@ type S3Client interface {
 	WriteMetaObject(bucketName, key string, uploadID *string, partNumber int64, newmeta *s3.UploadPartOutput) error
 	WriteFragment(key string, content *string, partNumber int64, _uploadID *string) (*string, error)
 	CompleteFragment(key string, fragmentsMeta map[int64]string, uploadID *string) (*s3.CompleteMultipartUploadOutput, error)
-	AbortMultipartUploadInput(key string, uploadID *string) error
 }
 
 // NewSession create S3 client session

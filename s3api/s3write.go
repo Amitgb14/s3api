@@ -3,13 +3,13 @@ package s3api
 import (
 	"fmt"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	log "github.com/sirupsen/logrus"
 )
 
 func (c *s3client) CreateUploadId(key string) (*string, error) {
@@ -133,22 +133,16 @@ func (c *s3client) WriteFragment(key string, content *string, partNumber int64, 
 
 func (c *s3client) convertMaptoCompletedPart(fragmentsMeta map[int64]string) []*s3.CompletedPart {
 	var paths []*s3.CompletedPart
-	var keys []int
-	for k, _ := range fragmentsMeta {
-		keys = append(keys, int(k))
-	}
-	sort.Ints(keys)
-	for _, key := range keys {
+	for key, val := range fragmentsMeta {
 		name := &s3.CompletedPart{
-			ETag:       aws.String(fragmentsMeta[int64(key)]),
-			PartNumber: aws.Int64(int64(key)),
+			ETag:       aws.String(val),
+			PartNumber: aws.Int64(key),
 		}
 		paths = append(paths, name)
 
 	}
 	return paths
 }
-
 func (c *s3client) CompleteFragment(key string, fragmentsMeta map[int64]string, uploadID *string) (*s3.CompleteMultipartUploadOutput, error) {
 	bucketName := GetBucketName(key)
 	objectName := GetKey(key)
@@ -156,7 +150,7 @@ func (c *s3client) CompleteFragment(key string, fragmentsMeta map[int64]string, 
 	enParts := c.convertMaptoCompletedPart(fragmentsMeta)
 
 	if enParts == nil {
-		return nil, fmt.Errorf("failed to merge all Parts of %v ", key)
+		return nil, fmt.Errorf("Failed to merge all Parts of %v ", key)
 	}
 	input := &s3.CompleteMultipartUploadInput{
 		Bucket: aws.String(bucketName),
@@ -167,21 +161,18 @@ func (c *s3client) CompleteFragment(key string, fragmentsMeta map[int64]string, 
 		UploadId: aws.String(*uploadID),
 	}
 
+	defer func() {
+		// After the CompleteMultipartUpload succeed, call this function
+		// to clean FRAGMENTS_METADATA objects
+		_, errM := c.DeleteMetadata(FRAGMENTS_METADATA, key)
+		if errM != nil {
+			log.Error(errM)
+		}
+	}()
+
 	result, err := c.svc.CompleteMultipartUpload(input)
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
-}
-
-func (c *s3client) AbortMultipartUploadInput(key string, uploadID *string) error {
-	bucketName := GetBucketName(key)
-	objectName := GetKey(key)
-	abortInput := &s3.AbortMultipartUploadInput{
-		Bucket:   aws.String(bucketName),
-		Key:      aws.String(objectName),
-		UploadId: uploadID,
-	}
-	_, err := c.svc.AbortMultipartUpload(abortInput)
-	return err
 }
